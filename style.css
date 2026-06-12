@@ -1572,3 +1572,43 @@ input:checked + .slider:before {
     margin: 0 auto;
   }
 }
+
+/* ==========================================
+   TOAST NOTIFICATION STYLING
+   ========================================== */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translate(-50%, 40px);
+  background: rgba(20, 25, 40, 0.95);
+  border: 1px solid var(--border);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 100000;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.toast.show {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+.toast.error {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(40, 15, 15, 0.95);
+  color: #f87171;
+}
+.toast.success {
+  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(15, 40, 25, 0.95);
+  color: #34d399;
+}
+

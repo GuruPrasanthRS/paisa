@@ -603,7 +603,11 @@ function initAuth() {
     if (authMode === 'signin') {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) {
-        showToast(error.message || 'Login failed — check credentials', 'error');
+        let msg = error.message || 'Login failed — check credentials';
+        if (msg.includes('Invalid login credentials')) {
+          msg = 'Password is not matching';
+        }
+        showToast(msg, 'error');
         setSyncStatus('error', 'Authentication failed');
         submitBtn.disabled = false;
       } else {
