@@ -24,6 +24,10 @@ let isAppLocked = false;
 let enteredPin = '';
 let pinHash = localStorage.getItem('paisa_pin_hash') || null;
 
+// ── Authentication & Multi-User State ──────────────────────────────────────
+let currentUser = null;
+let authMode = 'signin';
+
 // ── Sync status ────────────────────────────────────────────────────────────
 function setSyncStatus(state, msg) {
   const bar = document.getElementById('sync-bar');
@@ -611,6 +615,91 @@ function initSettings() {
   });
 }
 
+// ── AUTHENTICATION & REGISTRATION HELPERS ──────────────────────────────────
+function phoneToEmail(phone) {
+  const clean = phone.replace(/\D/g, ''); // strip non-digits
+  return `${clean}@paisa.app`;
+}
+
+function initAuth() {
+  const form = document.getElementById('auth-form');
+  const submitBtn = document.getElementById('auth-submit-btn');
+  const switchBtn = document.getElementById('auth-switch-btn');
+  const switchText = document.getElementById('auth-switch-text');
+  const title = document.getElementById('auth-title');
+  const subtitle = document.getElementById('auth-subtitle');
+  const phoneInput = document.getElementById('auth-phone');
+  const passwordInput = document.getElementById('auth-password');
+  
+  // Toggle Sign In vs Sign Up mode
+  switchBtn.addEventListener('click', () => {
+    if (authMode === 'signin') {
+      authMode = 'signup';
+      title.textContent = 'Create Account';
+      subtitle.textContent = 'Start tracking your expenses separately';
+      submitBtn.textContent = 'Sign Up';
+      switchText.textContent = 'Already have an account?';
+      switchBtn.textContent = 'Sign In';
+    } else {
+      authMode = 'signin';
+      title.textContent = 'Welcome to Paisa';
+      subtitle.textContent = 'Track your expenses elegantly';
+      submitBtn.textContent = 'Sign In';
+      switchText.textContent = "Don't have an account?";
+      switchBtn.textContent = 'Sign Up';
+    }
+    passwordInput.value = '';
+  });
+  
+  // Submit Login/Signup Form
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const phone = phoneInput.value.trim();
+    const password = passwordInput.value;
+    
+    if (!phone || password.length < 6) {
+      showToast('Password must be at least 6 characters', 'error');
+      return;
+    }
+    
+    const email = phoneToEmail(phone);
+    submitBtn.disabled = true;
+    setSyncStatus('syncing', authMode === 'signin' ? 'Signing in…' : 'Creating account…');
+    
+    if (authMode === 'signin') {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        showToast(error.message || 'Login failed — check credentials', 'error');
+        setSyncStatus('error', 'Authentication failed');
+        submitBtn.disabled = false;
+      } else {
+        showToast('Signed in successfully ✓', 'success');
+      }
+    } else {
+      const { data, error } = await sb.auth.signUp({ email, password });
+      if (error) {
+        showToast(error.message || 'Registration failed', 'error');
+        setSyncStatus('error', 'Sign up failed');
+        submitBtn.disabled = false;
+      } else {
+        showToast('Account created successfully ✓', 'success');
+      }
+    }
+  });
+  
+  // Logout / Sign Out
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    setSyncStatus('syncing', 'Signing out…');
+    const { error } = await sb.auth.signOut();
+    if (error) {
+      showToast('Sign out failed', 'error');
+    } else {
+      document.getElementById('settings-modal').classList.remove('active');
+      showToast('Signed out');
+    }
+  });
+}
+
 // ── INIT & DEPLOYMENT LOAD ─────────────────────────────────────────────────
 async function unlockAndLoad() {
   // Test Supabase connection & create table if needed
@@ -649,6 +738,9 @@ async function init() {
   // Settings & keypad click bindings
   initSettings();
   
+  // Auth Form bindings
+  initAuth();
+  
   document.querySelectorAll('.lock-keypad .key-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-key');
@@ -668,18 +760,40 @@ async function init() {
     }
   });
 
-  // Check if app is PIN locked
-  if (pinHash) {
-    isAppLocked = true;
-    const lockOverlay = document.getElementById('lock-overlay');
-    lockOverlay.style.display = 'flex';
-    setTimeout(() => { lockOverlay.classList.add('active'); }, 10);
-    // Set greeting/status to locked
-    setSyncStatus('error', 'Paisa is locked');
-  } else {
-    // Directly connect and load
-    await unlockAndLoad();
-  }
+  // Manage login and active session state
+  sb.auth.onAuthStateChange(async (event, session) => {
+    currentUser = session?.user || null;
+    const authOverlay = document.getElementById('auth-overlay');
+    const submitBtn = document.getElementById('auth-submit-btn');
+    
+    if (session) {
+      // Logged in: transition the login overlay out
+      authOverlay.classList.remove('active');
+      setTimeout(() => { authOverlay.style.display = 'none'; }, 400);
+      if (submitBtn) submitBtn.disabled = false;
+      
+      // Check if user has device passcode enabled
+      if (pinHash) {
+        isAppLocked = true;
+        const lockOverlay = document.getElementById('lock-overlay');
+        lockOverlay.style.display = 'flex';
+        setTimeout(() => { lockOverlay.classList.add('active'); }, 10);
+        setSyncStatus('error', 'Paisa is locked');
+      } else {
+        await unlockAndLoad();
+      }
+    } else {
+      // Logged out: hide lock screen and transition the login overlay in
+      isAppLocked = false;
+      const lockOverlay = document.getElementById('lock-overlay');
+      lockOverlay.classList.remove('active');
+      lockOverlay.style.display = 'none';
+      
+      authOverlay.style.display = 'flex';
+      setTimeout(() => { authOverlay.classList.add('active'); }, 10);
+      setSyncStatus('error', 'Please sign in');
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);

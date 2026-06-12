@@ -16,6 +16,11 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+<div class="glow-bg">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
 <div id="app">
 
   <!-- SYNC STATUS BAR -->
@@ -214,7 +219,35 @@
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <!-- AUTHENTICATION SCREEN -->
+  <div class="auth-overlay" id="auth-overlay" style="display: none;">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">💸</div>
+        <h2 class="auth-title" id="auth-title">Welcome to Paisa</h2>
+        <p class="auth-subtitle" id="auth-subtitle">Track your expenses elegantly</p>
+      </div>
+      
+      <form id="auth-form" onsubmit="event.preventDefault();">
+        <div class="field-group">
+          <label for="auth-phone">Phone Number</label>
+          <input type="tel" id="auth-phone" placeholder="Enter phone number" autocomplete="tel" required />
+        </div>
+        
+        <div class="field-group" style="margin-top: 14px; margin-bottom: 20px;">
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        
+        <button class="save-btn" id="auth-submit-btn">Sign In</button>
+      </form>
+      
+      <div class="auth-switch">
+        <span id="auth-switch-text">Don't have an account?</span>
+        <button class="text-btn" id="auth-switch-btn">Sign Up</button>
+      </div>
+    </div>
+  </div>
 
   <!-- PASSCODE LOCK SCREEN OVERLAY -->
   <div class="lock-overlay" id="lock-overlay" style="display: none;">
@@ -275,6 +308,13 @@
             <input type="password" id="new-pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="off" />
             <button class="primary-btn" id="save-pin-btn">Enable PIN</button>
           </div>
+        </div>
+        
+        <div class="setting-item" style="border-bottom: none; margin-top: 24px; padding-top: 14px;">
+          <button class="logout-btn" id="logout-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Sign Out
+          </button>
         </div>
       </div>
     </div>
