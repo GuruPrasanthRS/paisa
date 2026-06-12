@@ -25,6 +25,8 @@ create table expenses (
 
 alter table expenses enable row level security;
 
+drop policy if exists "Users can manage their own expenses" on expenses;
+
 create policy "Users can manage their own expenses" on expenses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
@@ -43,6 +45,8 @@ alter table expenses enable row level security;
 drop policy if exists "Allow all" on expenses;
 
 -- 4. Create a secure policy where users can only manage their own expenses
+drop policy if exists "Users can manage their own expenses" on expenses;
+
 create policy "Users can manage their own expenses" on expenses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
