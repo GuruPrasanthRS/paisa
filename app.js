@@ -525,7 +525,9 @@ async function verifyPin() {
   
   if (hash === pinHash) {
     isAppLocked = false;
-    document.getElementById('lock-overlay').classList.remove('active');
+    const lockOverlay = document.getElementById('lock-overlay');
+    lockOverlay.classList.remove('active');
+    setTimeout(() => { lockOverlay.style.display = 'none'; }, 400);
     showToast('Unlocked ✓', 'success');
     
     // Reset dots & code
@@ -669,7 +671,9 @@ async function init() {
   // Check if app is PIN locked
   if (pinHash) {
     isAppLocked = true;
-    document.getElementById('lock-overlay').classList.add('active');
+    const lockOverlay = document.getElementById('lock-overlay');
+    lockOverlay.style.display = 'flex';
+    setTimeout(() => { lockOverlay.classList.add('active'); }, 10);
     // Set greeting/status to locked
     setSyncStatus('error', 'Paisa is locked');
   } else {
