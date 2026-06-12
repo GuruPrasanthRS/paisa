@@ -19,6 +19,11 @@ let histFilter = 'all';
 let cache = {}; // local cache: dateKey -> entries[]
 let isSaving = false;
 
+// ── Passcode & Security State ──────────────────────────────────────────────
+let isAppLocked = false;
+let enteredPin = '';
+let pinHash = localStorage.getItem('paisa_pin_hash') || null;
+
 // ── Sync status ────────────────────────────────────────────────────────────
 function setSyncStatus(state, msg) {
   const bar = document.getElementById('sync-bar');
@@ -480,24 +485,137 @@ function showToast(msg, type='') {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
-async function init() {
-  updateGreeting();
-  document.getElementById('f-time').value = getNow();
-  setMode('upi');
+// ── PASSCODE LOCK & SECURITY HELPERS ────────────────────────────────────────
+async function hashPin(pin) {
+  const msgUint8 = new TextEncoder().encode(pin);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
-  document.getElementById('f-amt').addEventListener('keydown', e=>{
-    if(e.key==='Enter') document.getElementById('f-desc').focus();
+function pressKey(val) {
+  if (!isAppLocked) return;
+  const dots = document.querySelectorAll('#pin-dots .dot');
+  
+  if (val === 'clear') {
+    enteredPin = '';
+  } else if (val === 'delete') {
+    enteredPin = enteredPin.slice(0, -1);
+  } else if (enteredPin.length < 4) {
+    enteredPin += val;
+  }
+  
+  // Update UI dots
+  dots.forEach((dot, idx) => {
+    if (idx < enteredPin.length) {
+      dot.classList.add('filled');
+    } else {
+      dot.classList.remove('filled');
+    }
   });
-  document.getElementById('f-note').addEventListener('keydown', e=>{
-    if(e.key==='Enter') addExpense();
-  });
+  
+  if (enteredPin.length === 4) {
+    verifyPin();
+  }
+}
 
+async function verifyPin() {
+  const container = document.querySelector('.lock-container');
+  const hash = await hashPin(enteredPin);
+  
+  if (hash === pinHash) {
+    isAppLocked = false;
+    document.getElementById('lock-overlay').classList.remove('active');
+    showToast('Unlocked ✓', 'success');
+    
+    // Reset dots & code
+    enteredPin = '';
+    document.querySelectorAll('#pin-dots .dot').forEach(dot => dot.classList.remove('filled'));
+    
+    // Complete database loading
+    await unlockAndLoad();
+  } else {
+    // Shake animation
+    container.classList.add('shake');
+    showToast('Incorrect Passcode', 'error');
+    setTimeout(() => {
+      container.classList.remove('shake');
+      enteredPin = '';
+      document.querySelectorAll('#pin-dots .dot').forEach(dot => dot.classList.remove('filled'));
+    }, 350);
+  }
+}
+
+function initSettings() {
+  const openBtn = document.getElementById('open-settings-btn');
+  const closeBtn = document.getElementById('close-settings-btn');
+  const modal = document.getElementById('settings-modal');
+  const toggle = document.getElementById('passcode-toggle');
+  const setupFields = document.getElementById('passcode-setup-fields');
+  const savePinBtn = document.getElementById('save-pin-btn');
+  const newPinInput = document.getElementById('new-pin-input');
+  
+  // Open settings
+  openBtn.addEventListener('click', () => {
+    modal.classList.add('active');
+    toggle.checked = !!localStorage.getItem('paisa_pin_hash');
+    if (toggle.checked) {
+      setupFields.classList.remove('hidden');
+      newPinInput.placeholder = '••••';
+    } else {
+      setupFields.classList.add('hidden');
+    }
+  });
+  
+  // Close settings
+  closeBtn.addEventListener('click', () => {
+    modal.classList.remove('active');
+  });
+  modal.addEventListener('click', e => {
+    if (e.target === modal) modal.classList.remove('active');
+  });
+  
+  // Toggle passcode lock feature
+  toggle.addEventListener('change', () => {
+    if (toggle.checked) {
+      setupFields.classList.remove('hidden');
+      newPinInput.value = '';
+      newPinInput.focus();
+    } else {
+      localStorage.removeItem('paisa_pin_hash');
+      pinHash = null;
+      setupFields.classList.add('hidden');
+      newPinInput.value = '';
+      showToast('Passcode disabled');
+    }
+  });
+  
+  // Save PIN
+  savePinBtn.addEventListener('click', async () => {
+    const pin = newPinInput.value;
+    if (pin.length !== 4 || isNaN(pin)) {
+      showToast('PIN must be 4 digits', 'error');
+      newPinInput.focus();
+      return;
+    }
+    
+    const hash = await hashPin(pin);
+    localStorage.setItem('paisa_pin_hash', hash);
+    pinHash = hash;
+    newPinInput.value = '';
+    setupFields.classList.add('hidden');
+    showToast('Passcode Enabled ✓', 'success');
+    modal.classList.remove('active');
+  });
+}
+
+// ── INIT & DEPLOYMENT LOAD ─────────────────────────────────────────────────
+async function unlockAndLoad() {
   // Test Supabase connection & create table if needed
   setSyncStatus('syncing','Connecting to Supabase…');
   try {
     const { error } = await sb.from('expenses').select('id').limit(1);
     if (error && error.code === '42P01') {
-      // Table doesn't exist — show setup message
       setSyncStatus('error', 'Run the SQL setup first — see DEPLOY.md');
       showToast('Setup needed — see guide', 'error');
       return;
@@ -511,6 +629,52 @@ async function init() {
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}
+
+async function init() {
+  updateGreeting();
+  document.getElementById('f-time').value = getNow();
+  setMode('upi');
+
+  document.getElementById('f-amt').addEventListener('keydown', e=>{
+    if(e.key==='Enter') document.getElementById('f-desc').focus();
+  });
+  document.getElementById('f-note').addEventListener('keydown', e=>{
+    if(e.key==='Enter') addExpense();
+  });
+
+  // Settings & keypad click bindings
+  initSettings();
+  
+  document.querySelectorAll('.lock-keypad .key-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-key');
+      pressKey(key);
+    });
+  });
+
+  // Add virtual keyboard capture for lock screen
+  document.addEventListener('keydown', e => {
+    if (!isAppLocked) return;
+    if (e.key >= '0' && e.key <= '9') {
+      pressKey(e.key);
+    } else if (e.key === 'Backspace') {
+      pressKey('delete');
+    } else if (e.key === 'Escape') {
+      pressKey('clear');
+    }
+  });
+
+  // Check if app is PIN locked
+  if (pinHash) {
+    isAppLocked = true;
+    document.getElementById('lock-overlay').classList.add('active');
+    // Set greeting/status to locked
+    setSyncStatus('error', 'Paisa is locked');
+  } else {
+    // Directly connect and load
+    await unlockAndLoad();
   }
 }
 
