@@ -41,8 +41,10 @@ async function dbFetchDay(dateStr) {
 
 async function dbFetchMonth(month) {
   // month = 'YYYY-MM'
+  const [year, mon] = month.split('-');
+  const lastDay = new Date(year, mon, 0).getDate();
   const from = month + '-01';
-  const to   = month + '-31';
+  const to   = month + '-' + String(lastDay).padStart(2, '0');
   const { data, error } = await sb
     .from('expenses')
     .select('*')
