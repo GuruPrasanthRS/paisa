@@ -617,12 +617,21 @@ function initAuth() {
     } else {
       const { data, error } = await sb.auth.signUp({ email, password });
       if (error) {
-        showToast(error.message || 'Registration failed', 'error');
+        let msg = error.message || 'Registration failed';
+        if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
+          msg = 'Phone number already registered. Please Sign In.';
+        }
+        showToast(msg, 'error');
         setSyncStatus('error', 'Sign up failed');
         submitBtn.disabled = false;
       } else {
         localStorage.setItem('paisa_saved_phone', phone);
-        showToast('Account created successfully ✓', 'success');
+        if (data && !data.session) {
+          showToast('Account created! Turn off "Confirm sign up" in Supabase Auth settings to log in.', 'error');
+          submitBtn.disabled = false;
+        } else {
+          showToast('Account created successfully ✓', 'success');
+        }
       }
     }
   });
