@@ -1,4 +1,4 @@
-const CACHE = 'paisa-v2';
+const CACHE = 'paisa-v3';
 const ASSETS = [
   '/',
   '/index.html',
