@@ -19,11 +19,6 @@ let histFilter = 'all';
 let cache = {}; // local cache: dateKey -> entries[]
 let isSaving = false;
 
-// ── Passcode & Security State ──────────────────────────────────────────────
-let isAppLocked = false;
-let enteredPin = '';
-let pinHash = localStorage.getItem('paisa_pin_hash') || null;
-
 // ── Authentication & Multi-User State ──────────────────────────────────────
 let currentUser = null;
 let authMode = 'signin';
@@ -154,7 +149,7 @@ async function addExpense() {
   const today = new Date(); today.setHours(0,0,0,0);
   const date  = dateKey(today);
 
-  const entry = { date, time, amount: amt, mode: currentMode, description: desc, category: cat, note };
+  const entry = { date, time, amount: amt, mode: currentMode, description: desc, category: cat, note, user_id: currentUser?.id };
 
   isSaving = true;
   const btn = document.getElementById('save-btn');
@@ -489,87 +484,25 @@ function showToast(msg, type='') {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
-// ── PASSCODE LOCK & SECURITY HELPERS ────────────────────────────────────────
-async function hashPin(pin) {
-  const msgUint8 = new TextEncoder().encode(pin);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function pressKey(val) {
-  if (!isAppLocked) return;
-  const dots = document.querySelectorAll('#pin-dots .dot');
-  
-  if (val === 'clear') {
-    enteredPin = '';
-  } else if (val === 'delete') {
-    enteredPin = enteredPin.slice(0, -1);
-  } else if (enteredPin.length < 4) {
-    enteredPin += val;
-  }
-  
-  // Update UI dots
-  dots.forEach((dot, idx) => {
-    if (idx < enteredPin.length) {
-      dot.classList.add('filled');
-    } else {
-      dot.classList.remove('filled');
-    }
-  });
-  
-  if (enteredPin.length === 4) {
-    verifyPin();
-  }
-}
-
-async function verifyPin() {
-  const container = document.querySelector('.lock-container');
-  const hash = await hashPin(enteredPin);
-  
-  if (hash === pinHash) {
-    isAppLocked = false;
-    const lockOverlay = document.getElementById('lock-overlay');
-    lockOverlay.classList.remove('active');
-    setTimeout(() => { lockOverlay.style.display = 'none'; }, 400);
-    showToast('Unlocked ✓', 'success');
-    
-    // Reset dots & code
-    enteredPin = '';
-    document.querySelectorAll('#pin-dots .dot').forEach(dot => dot.classList.remove('filled'));
-    
-    // Complete database loading
-    await unlockAndLoad();
-  } else {
-    // Shake animation
-    container.classList.add('shake');
-    showToast('Incorrect Passcode', 'error');
-    setTimeout(() => {
-      container.classList.remove('shake');
-      enteredPin = '';
-      document.querySelectorAll('#pin-dots .dot').forEach(dot => dot.classList.remove('filled'));
-    }, 350);
-  }
+// ── AUTHENTICATION & REGISTRATION HELPERS ──────────────────────────────────
+function phoneToEmail(phone) {
+  const clean = phone.replace(/\D/g, ''); // strip non-digits
+  return `${clean}@paisa.app`;
 }
 
 function initSettings() {
   const openBtn = document.getElementById('open-settings-btn');
   const closeBtn = document.getElementById('close-settings-btn');
   const modal = document.getElementById('settings-modal');
-  const toggle = document.getElementById('passcode-toggle');
-  const setupFields = document.getElementById('passcode-setup-fields');
-  const savePinBtn = document.getElementById('save-pin-btn');
-  const newPinInput = document.getElementById('new-pin-input');
   
   // Open settings
   openBtn.addEventListener('click', () => {
     modal.classList.add('active');
-    toggle.checked = !!localStorage.getItem('paisa_pin_hash');
-    if (toggle.checked) {
-      setupFields.classList.remove('hidden');
-      newPinInput.placeholder = '••••';
-    } else {
-      setupFields.classList.add('hidden');
+    // Display logged-in user's phone number
+    const displayPhone = document.getElementById('user-display-phone');
+    if (displayPhone && currentUser) {
+      const phone = currentUser.email ? currentUser.email.split('@')[0] : 'Account';
+      displayPhone.textContent = `Phone: +91 ${phone}`;
     }
   });
   
@@ -580,45 +513,6 @@ function initSettings() {
   modal.addEventListener('click', e => {
     if (e.target === modal) modal.classList.remove('active');
   });
-  
-  // Toggle passcode lock feature
-  toggle.addEventListener('change', () => {
-    if (toggle.checked) {
-      setupFields.classList.remove('hidden');
-      newPinInput.value = '';
-      newPinInput.focus();
-    } else {
-      localStorage.removeItem('paisa_pin_hash');
-      pinHash = null;
-      setupFields.classList.add('hidden');
-      newPinInput.value = '';
-      showToast('Passcode disabled');
-    }
-  });
-  
-  // Save PIN
-  savePinBtn.addEventListener('click', async () => {
-    const pin = newPinInput.value;
-    if (pin.length !== 4 || isNaN(pin)) {
-      showToast('PIN must be 4 digits', 'error');
-      newPinInput.focus();
-      return;
-    }
-    
-    const hash = await hashPin(pin);
-    localStorage.setItem('paisa_pin_hash', hash);
-    pinHash = hash;
-    newPinInput.value = '';
-    setupFields.classList.add('hidden');
-    showToast('Passcode Enabled ✓', 'success');
-    modal.classList.remove('active');
-  });
-}
-
-// ── AUTHENTICATION & REGISTRATION HELPERS ──────────────────────────────────
-function phoneToEmail(phone) {
-  const clean = phone.replace(/\D/g, ''); // strip non-digits
-  return `${clean}@paisa.app`;
 }
 
 function initAuth() {
@@ -630,25 +524,65 @@ function initAuth() {
   const subtitle = document.getElementById('auth-subtitle');
   const phoneInput = document.getElementById('auth-phone');
   const passwordInput = document.getElementById('auth-password');
+  const phoneGroup = document.getElementById('auth-phone-group');
   
-  // Toggle Sign In vs Sign Up mode
-  switchBtn.addEventListener('click', () => {
-    if (authMode === 'signin') {
-      authMode = 'signup';
-      title.textContent = 'Create Account';
-      subtitle.textContent = 'Start tracking your expenses separately';
-      submitBtn.textContent = 'Sign Up';
-      switchText.textContent = 'Already have an account?';
-      switchBtn.textContent = 'Sign In';
+  let savedPhone = localStorage.getItem('paisa_saved_phone');
+  
+  function applyWelcomeBack() {
+    savedPhone = localStorage.getItem('paisa_saved_phone');
+    if (savedPhone) {
+      authMode = 'signin';
+      title.textContent = 'Welcome Back';
+      subtitle.innerHTML = `Enter password for <strong style="color: var(--accent); font-family: var(--font-display);">${savedPhone}</strong>`;
+      submitBtn.textContent = 'Sign In';
+      phoneGroup.classList.add('hidden');
+      phoneInput.removeAttribute('required');
+      phoneInput.value = savedPhone;
+      switchText.textContent = 'Not you?';
+      switchBtn.textContent = 'Switch Account';
+      passwordInput.value = '';
+      passwordInput.focus();
     } else {
       authMode = 'signin';
       title.textContent = 'Welcome to Paisa';
       subtitle.textContent = 'Track your expenses elegantly';
       submitBtn.textContent = 'Sign In';
+      phoneGroup.classList.remove('hidden');
+      phoneInput.setAttribute('required', '');
+      phoneInput.value = '';
       switchText.textContent = "Don't have an account?";
       switchBtn.textContent = 'Sign Up';
+      passwordInput.value = '';
     }
-    passwordInput.value = '';
+  }
+
+  // Initial check
+  applyWelcomeBack();
+  
+  // Toggle Sign In vs Sign Up mode OR handle Switch Account
+  switchBtn.addEventListener('click', () => {
+    if (switchBtn.textContent === 'Switch Account') {
+      localStorage.removeItem('paisa_saved_phone');
+      applyWelcomeBack();
+      phoneInput.focus();
+    } else {
+      if (authMode === 'signin') {
+        authMode = 'signup';
+        title.textContent = 'Create Account';
+        subtitle.textContent = 'Start tracking your expenses separately';
+        submitBtn.textContent = 'Sign Up';
+        switchText.textContent = 'Already have an account?';
+        switchBtn.textContent = 'Sign In';
+      } else {
+        authMode = 'signin';
+        title.textContent = 'Welcome to Paisa';
+        subtitle.textContent = 'Track your expenses elegantly';
+        submitBtn.textContent = 'Sign In';
+        switchText.textContent = "Don't have an account?";
+        switchBtn.textContent = 'Sign Up';
+      }
+      passwordInput.value = '';
+    }
   });
   
   // Submit Login/Signup Form
@@ -673,6 +607,7 @@ function initAuth() {
         setSyncStatus('error', 'Authentication failed');
         submitBtn.disabled = false;
       } else {
+        localStorage.setItem('paisa_saved_phone', phone);
         showToast('Signed in successfully ✓', 'success');
       }
     } else {
@@ -682,6 +617,7 @@ function initAuth() {
         setSyncStatus('error', 'Sign up failed');
         submitBtn.disabled = false;
       } else {
+        localStorage.setItem('paisa_saved_phone', phone);
         showToast('Account created successfully ✓', 'success');
       }
     }
@@ -696,13 +632,13 @@ function initAuth() {
     } else {
       document.getElementById('settings-modal').classList.remove('active');
       showToast('Signed out');
+      applyWelcomeBack();
     }
   });
 }
 
 // ── INIT & DEPLOYMENT LOAD ─────────────────────────────────────────────────
 async function unlockAndLoad() {
-  // Test Supabase connection & create table if needed
   setSyncStatus('syncing','Connecting to Supabase…');
   try {
     const { error } = await sb.from('expenses').select('id').limit(1);
@@ -735,30 +671,11 @@ async function init() {
     if(e.key==='Enter') addExpense();
   });
 
-  // Settings & keypad click bindings
+  // Settings bindings
   initSettings();
   
   // Auth Form bindings
   initAuth();
-  
-  document.querySelectorAll('.lock-keypad .key-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.getAttribute('data-key');
-      pressKey(key);
-    });
-  });
-
-  // Add virtual keyboard capture for lock screen
-  document.addEventListener('keydown', e => {
-    if (!isAppLocked) return;
-    if (e.key >= '0' && e.key <= '9') {
-      pressKey(e.key);
-    } else if (e.key === 'Backspace') {
-      pressKey('delete');
-    } else if (e.key === 'Escape') {
-      pressKey('clear');
-    }
-  });
 
   // Manage login and active session state
   sb.auth.onAuthStateChange(async (event, session) => {
@@ -767,31 +684,53 @@ async function init() {
     const submitBtn = document.getElementById('auth-submit-btn');
     
     if (session) {
-      // Logged in: transition the login overlay out
+      if (currentUser.email) {
+        const phone = currentUser.email.split('@')[0];
+        if (/^\d+$/.test(phone)) {
+          localStorage.setItem('paisa_saved_phone', phone);
+        }
+      }
+      
       authOverlay.classList.remove('active');
       setTimeout(() => { authOverlay.style.display = 'none'; }, 400);
       if (submitBtn) submitBtn.disabled = false;
       
-      // Check if user has device passcode enabled
-      if (pinHash) {
-        isAppLocked = true;
-        const lockOverlay = document.getElementById('lock-overlay');
-        lockOverlay.style.display = 'flex';
-        setTimeout(() => { lockOverlay.classList.add('active'); }, 10);
-        setSyncStatus('error', 'Paisa is locked');
-      } else {
-        await unlockAndLoad();
-      }
+      await unlockAndLoad();
     } else {
-      // Logged out: hide lock screen and transition the login overlay in
-      isAppLocked = false;
-      const lockOverlay = document.getElementById('lock-overlay');
-      lockOverlay.classList.remove('active');
-      lockOverlay.style.display = 'none';
-      
       authOverlay.style.display = 'flex';
       setTimeout(() => { authOverlay.classList.add('active'); }, 10);
       setSyncStatus('error', 'Please sign in');
+      
+      // Sync welcome back layout
+      const phoneInput = document.getElementById('auth-phone');
+      const savedPhone = localStorage.getItem('paisa_saved_phone');
+      const title = document.getElementById('auth-title');
+      const subtitle = document.getElementById('auth-subtitle');
+      const phoneGroup = document.getElementById('auth-phone-group');
+      const switchText = document.getElementById('auth-switch-text');
+      const switchBtn = document.getElementById('auth-switch-btn');
+      
+      if (savedPhone) {
+        authMode = 'signin';
+        title.textContent = 'Welcome Back';
+        subtitle.innerHTML = `Enter password for <strong style="color: var(--accent); font-family: var(--font-display);">${savedPhone}</strong>`;
+        submitBtn.textContent = 'Sign In';
+        phoneGroup.classList.add('hidden');
+        phoneInput.removeAttribute('required');
+        phoneInput.value = savedPhone;
+        switchText.textContent = 'Not you?';
+        switchBtn.textContent = 'Switch Account';
+      } else {
+        authMode = 'signin';
+        title.textContent = 'Welcome to Paisa';
+        subtitle.textContent = 'Track your expenses elegantly';
+        submitBtn.textContent = 'Sign In';
+        phoneGroup.classList.remove('hidden');
+        phoneInput.setAttribute('required', '');
+        phoneInput.value = '';
+        switchText.textContent = "Don't have an account?";
+        switchBtn.textContent = 'Sign Up';
+      }
     }
   });
 }

@@ -2,8 +2,9 @@
 
 ---
 
-## STEP 1 — Create the Supabase table (do this first)
+## STEP 1 — Create or update the Supabase table (do this first)
 
+### Option A: If you are setting up a brand-new project:
 1. Go to your Supabase project → click **SQL Editor** in the left sidebar
 2. Click **New query**
 3. Paste this SQL and click **Run**:
@@ -18,16 +19,36 @@ create table expenses (
   description text not null,
   category    text not null,
   note        text default '',
+  user_id     uuid references auth.users(id) default auth.uid(),
   created_at  timestamptz default now()
 );
 
 alter table expenses enable row level security;
 
-create policy "Allow all" on expenses
-  for all using (true) with check (true);
+create policy "Users can manage their own expenses" on expenses
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+```
+
+### Option B: If you already have the `expenses` table created:
+If you already created the table previously, run this query to add the `user_id` column and restrict access:
+
+```sql
+-- 1. Add user_id column referencing the auth.users table
+alter table expenses add column if not exists user_id uuid references auth.users(id) default auth.uid();
+
+-- 2. Enable Row Level Security (if not already enabled)
+alter table expenses enable row level security;
+
+-- 3. Drop the old insecure policy that allowed anyone to see all data
+drop policy if exists "Allow all" on expenses;
+
+-- 4. Create a secure policy where users can only manage their own expenses
+create policy "Users can manage their own expenses" on expenses
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
 
 4. You should see **Success. No rows returned** — that means it worked.
+
 
 ---
 
