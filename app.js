@@ -91,6 +91,12 @@ function getNow() {
   const n = new Date();
   return n.getHours().toString().padStart(2,'0') + ':' + n.getMinutes().toString().padStart(2,'0');
 }
+function getLocalDateString(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 function dateKey(d) { return d.toISOString().split('T')[0]; }
 function formatDisplayDate(d) {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -146,8 +152,18 @@ async function addExpense() {
   const time = document.getElementById('f-time').value || getNow();
   const cat  = document.getElementById('f-cat').value;
   const note = document.getElementById('f-note').value.trim();
-  const today = new Date(); today.setHours(0,0,0,0);
-  const date  = dateKey(today);
+  
+  const dateStr = document.getElementById('f-date').value;
+  let date;
+  if (dateStr) {
+    const [yyyy, mm, dd] = dateStr.split('-').map(Number);
+    const selectedDate = new Date(yyyy, mm - 1, dd);
+    selectedDate.setHours(0,0,0,0);
+    date = dateKey(selectedDate);
+  } else {
+    const today = new Date(); today.setHours(0,0,0,0);
+    date = dateKey(today);
+  }
 
   const entry = { date, time, amount: amt, mode: currentMode, description: desc, category: cat, note, user_id: currentUser?.id };
 
@@ -164,10 +180,17 @@ async function addExpense() {
     cache[date].push(saved);
     cache[date].sort((a,b) => a.time.localeCompare(b.time));
 
+    // Also update monthly cache if it exists
+    const mKey = '_month_' + date.slice(0, 7);
+    if (cache[mKey]) {
+      cache[mKey].push(saved);
+    }
+
     amtEl.value  = '';
     descEl.value = '';
     document.getElementById('f-note').value = '';
     document.getElementById('f-time').value = getNow();
+    document.getElementById('f-date').value = getLocalDateString();
 
     setSyncStatus('ok', 'Saved ✓');
     showToast('Saved ✓', 'success');
@@ -727,6 +750,7 @@ async function unlockAndLoad() {
 async function init() {
   updateGreeting();
   document.getElementById('f-time').value = getNow();
+  document.getElementById('f-date').value = getLocalDateString();
   setMode('upi');
 
   document.getElementById('f-amt').addEventListener('keydown', e=>{
