@@ -494,6 +494,7 @@ function initSettings() {
   const openBtn = document.getElementById('open-settings-btn');
   const closeBtn = document.getElementById('close-settings-btn');
   const modal = document.getElementById('settings-modal');
+  const deleteBtn = document.getElementById('delete-acc-btn');
   
   // Open settings
   openBtn.addEventListener('click', () => {
@@ -513,6 +514,40 @@ function initSettings() {
   modal.addEventListener('click', e => {
     if (e.target === modal) modal.classList.remove('active');
   });
+
+  // Delete account click binding
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      const confirm1 = confirm("Are you sure you want to permanently delete your account?");
+      if (!confirm1) return;
+      
+      const confirm2 = confirm("CRITICAL: This will erase all your logged expenses and delete your phone number from the system. This action cannot be undone. Do you wish to proceed?");
+      if (!confirm2) return;
+      
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = 'Deleting...';
+      setSyncStatus('syncing', 'Deleting account...');
+      
+      try {
+        const { error } = await sb.rpc('delete_own_user');
+        if (error) throw error;
+        
+        // Success: sign out, clear storage, close modal
+        localStorage.clear();
+        modal.classList.remove('active');
+        showToast('Account permanently deleted', 'success');
+        await sb.auth.signOut();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete account', 'error');
+        setSyncStatus('error', 'Deletion failed');
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Delete Account
+        `;
+      }
+    });
+  }
 }
 
 function initAuth() {

@@ -44,6 +44,15 @@ create policy "Allow read for all" on registered_phones for select using (true);
 drop policy if exists "Allow insert/update for all" on registered_phones;
 create policy "Allow insert/update for all" on registered_phones for insert with check (true);
 create policy "Allow update for all" on registered_phones for update using (true) with check (true);
+
+-- 3. Create a security definer function to delete the currently authenticated user
+create or replace function delete_own_user()
+returns void as $$
+begin
+  -- Deleting from auth.users automatically triggers cascade delete on expenses and registered_phones
+  delete from auth.users where id = auth.uid();
+end;
+$$ language plpgsql security definer;
 ```
 
 ### Option B: If you already have the `expenses` table created:
@@ -79,6 +88,15 @@ create policy "Allow read for all" on registered_phones for select using (true);
 drop policy if exists "Allow insert/update for all" on registered_phones;
 create policy "Allow insert/update for all" on registered_phones for insert with check (true);
 create policy "Allow update for all" on registered_phones for update using (true) with check (true);
+
+-- 6. Create a security definer function to delete the currently authenticated user
+create or replace function delete_own_user()
+returns void as $$
+begin
+  -- Deleting from auth.users automatically triggers cascade delete on expenses and registered_phones
+  delete from auth.users where id = auth.uid();
+end;
+$$ language plpgsql security definer;
 ```
 
 4. You should see **Success. No rows returned** — that means it worked.
