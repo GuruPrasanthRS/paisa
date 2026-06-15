@@ -56,6 +56,17 @@ create policy "Users can manage their own expenses" on expenses
 
 ---
 
+## STEP 1b — Turn Off Email Confirmation in Supabase (MUST DO)
+
+To allow phone number signup to work instantly without sending emails:
+1. In your Supabase sidebar, click **Authentication** (key icon).
+2. Under settings, click **Providers**.
+3. Click to expand the **Email** section.
+4. Toggle **Confirm email** to **OFF** (Disabled).
+5. Click **Save** at the bottom of the section.
+
+---
+
 ## STEP 2 — Upload to GitHub
 
 1. Go to github.com → click **New repository**
