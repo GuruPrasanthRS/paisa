@@ -605,13 +605,28 @@ function initAuth() {
       if (error) {
         let msg = error.message || 'Login failed — check credentials';
         if (msg.includes('Invalid login credentials')) {
-          msg = 'Password is not matching';
+          try {
+            const { data: phoneData } = await sb
+              .from('registered_phones')
+              .select('phone')
+              .eq('phone', phone)
+              .maybeSingle();
+            
+            if (phoneData) {
+              msg = 'Password is not matching';
+            } else {
+              msg = 'User is not registered';
+            }
+          } catch (e) {
+            msg = 'Password is not matching or phone number incorrect';
+          }
         }
         showToast(msg, 'error');
         setSyncStatus('error', 'Authentication failed');
         submitBtn.disabled = false;
       } else {
         localStorage.setItem('paisa_saved_phone', phone);
+        sb.from('registered_phones').upsert([{ phone }]).then(() => {});
         showToast('Signed in successfully ✓', 'success');
       }
     } else {
@@ -626,6 +641,8 @@ function initAuth() {
         submitBtn.disabled = false;
       } else {
         localStorage.setItem('paisa_saved_phone', phone);
+        sb.from('registered_phones').insert([{ phone }]).then(() => {});
+        
         if (data && !data.session) {
           showToast('Account created! Turn off "Confirm sign up" in Supabase Auth settings to log in.', 'error');
           submitBtn.disabled = false;

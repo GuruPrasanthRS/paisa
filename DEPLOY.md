@@ -29,6 +29,21 @@ drop policy if exists "Users can manage their own expenses" on expenses;
 
 create policy "Users can manage their own expenses" on expenses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- 2. Create the registered_phones table for login validation
+create table if not exists registered_phones (
+  phone       text primary key,
+  created_at  timestamptz default now()
+);
+
+alter table registered_phones enable row level security;
+
+drop policy if exists "Allow read for all" on registered_phones;
+create policy "Allow read for all" on registered_phones for select using (true);
+
+drop policy if exists "Allow insert/update for all" on registered_phones;
+create policy "Allow insert/update for all" on registered_phones for insert with check (true);
+create policy "Allow update for all" on registered_phones for update using (true) with check (true);
 ```
 
 ### Option B: If you already have the `expenses` table created:
@@ -49,6 +64,21 @@ drop policy if exists "Users can manage their own expenses" on expenses;
 
 create policy "Users can manage their own expenses" on expenses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- 5. Create the registered_phones table for login validation
+create table if not exists registered_phones (
+  phone       text primary key,
+  created_at  timestamptz default now()
+);
+
+alter table registered_phones enable row level security;
+
+drop policy if exists "Allow read for all" on registered_phones;
+create policy "Allow read for all" on registered_phones for select using (true);
+
+drop policy if exists "Allow insert/update for all" on registered_phones;
+create policy "Allow insert/update for all" on registered_phones for insert with check (true);
+create policy "Allow update for all" on registered_phones for update using (true) with check (true);
 ```
 
 4. You should see **Success. No rows returned** — that means it worked.
