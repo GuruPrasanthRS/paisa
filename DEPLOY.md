@@ -19,7 +19,7 @@ create table expenses (
   description text not null,
   category    text not null,
   note        text default '',
-  user_id     uuid references auth.users(id) default auth.uid(),
+  user_id     uuid references auth.users(id) on delete cascade default auth.uid(),
   created_at  timestamptz default now()
 );
 
@@ -48,8 +48,18 @@ create policy "Allow update for all" on registered_phones for update using (true
 -- 3. Create a security definer function to delete the currently authenticated user
 create or replace function delete_own_user()
 returns void as $$
+declare
+  user_phone text;
 begin
-  -- Deleting from auth.users automatically triggers cascade delete on expenses and registered_phones
+  -- Get the phone number from email (e.g. "911234567890@paisa.app" -> "911234567890")
+  select split_part(email, '@', 1) into user_phone from auth.users where id = auth.uid();
+
+  -- Delete from registered_phones
+  if user_phone is not null then
+    delete from public.registered_phones where phone = user_phone;
+  end if;
+
+  -- Deleting from auth.users automatically triggers cascade delete on expenses
   delete from auth.users where id = auth.uid();
 end;
 $$ language plpgsql security definer;
@@ -61,6 +71,10 @@ If you already created the table previously, run this query to add the `user_id`
 ```sql
 -- 1. Add user_id column referencing the auth.users table
 alter table expenses add column if not exists user_id uuid references auth.users(id) default auth.uid();
+
+-- 1b. Drop existing foreign key and recreate it with ON DELETE CASCADE
+alter table expenses drop constraint if exists expenses_user_id_fkey;
+alter table expenses add constraint expenses_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
 
 -- 2. Enable Row Level Security (if not already enabled)
 alter table expenses enable row level security;
@@ -92,8 +106,18 @@ create policy "Allow update for all" on registered_phones for update using (true
 -- 6. Create a security definer function to delete the currently authenticated user
 create or replace function delete_own_user()
 returns void as $$
+declare
+  user_phone text;
 begin
-  -- Deleting from auth.users automatically triggers cascade delete on expenses and registered_phones
+  -- Get the phone number from email (e.g. "911234567890@paisa.app" -> "911234567890")
+  select split_part(email, '@', 1) into user_phone from auth.users where id = auth.uid();
+
+  -- Delete from registered_phones
+  if user_phone is not null then
+    delete from public.registered_phones where phone = user_phone;
+  end if;
+
+  -- Deleting from auth.users automatically triggers cascade delete on expenses
   delete from auth.users where id = auth.uid();
 end;
 $$ language plpgsql security definer;
